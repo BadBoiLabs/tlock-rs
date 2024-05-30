@@ -49,13 +49,13 @@ pub fn encrypt<W: io::Write, R: io::Read>(
     mut dst: W,
     mut src: R,
     public_key_bytes: &[u8],
-    round_number: u64,
+    tag: &[u8],
 ) -> anyhow::Result<()> {
     let mut message = [0; 16];
     src.read(&mut message).map_err(TLockError::IOError)?;
 
     let ct = info_span!("ibe::encryption")
-        .in_scope(|| time_lock(public_key_bytes, round_number, message))?;
+        .in_scope(|| time_lock(public_key_bytes, tag, message))?;
 
     dst.write_all(&ct.u.to_compressed()?)?;
     dst.write_all(&ct.v)?;
@@ -124,17 +124,11 @@ pub fn decrypt<W: io::Write, R: io::Read>(
 
 fn time_lock<M: AsRef<[u8]>>(
     public_key_bytes: &[u8],
-    round_number: u64,
+    tag: &[u8],
     message: M,
 ) -> Result<ibe::Ciphertext, anyhow::Error> {
     let public_key = GAffine::try_from(public_key_bytes)?;
-    let id = {
-        let mut hash = sha2::Sha256::new();
-        hash.update(round_number.to_be_bytes());
-        &hash.finalize().to_vec()[0..32]
-    };
-
-    ibe::encrypt(public_key, id, message)
+    ibe::encrypt(public_key, tag, message)
 }
 
 fn time_unlock(signature: &[u8], c: &Ciphertext) -> Result<Vec<u8>, TLockError> {

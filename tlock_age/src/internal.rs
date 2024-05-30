@@ -120,15 +120,15 @@ impl age::Identity for HeaderIdentity {
 pub struct Recipient {
     hash: Vec<u8>,
     public_key_bytes: Vec<u8>,
-    round: u64,
+    tag: [u8; 32],
 }
 
 impl Recipient {
-    pub fn new(hash: &[u8], public_key_bytes: &[u8], round: u64) -> Self {
+    pub fn new(hash: &[u8], public_key_bytes: &[u8], tag: [u8; 32]) -> Self {
         Self {
             hash: hash.to_vec(),
             public_key_bytes: public_key_bytes.to_vec(),
-            round,
+            tag,
         }
     }
 }
@@ -169,11 +169,11 @@ impl age::Recipient for Recipient {
     fn wrap_file_key(&self, file_key: &FileKey) -> Result<Vec<Stanza>, age::EncryptError> {
         let src = file_key.expose_secret().as_slice();
         let dst = InMemoryWriter::new();
-        let _ = tlock::encrypt(dst.to_owned(), src, &self.public_key_bytes, self.round);
+        let _ = tlock::encrypt(dst.to_owned(), src, &self.public_key_bytes, &self.tag);
 
         Ok(vec![Stanza {
             tag: STANZA_TAG.to_string(),
-            args: vec![self.round.to_string(), hex::encode(&self.hash)],
+            args: vec![hex::encode(self.tag), hex::encode(&self.hash)],
             body: dst.memory(),
         }])
     }

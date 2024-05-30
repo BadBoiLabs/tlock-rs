@@ -1,7 +1,6 @@
 [workspace]
 
 members = [
-    "age-plugin-tlock",
     "tlock",
     "tlock_age"
 ]

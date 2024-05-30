@@ -78,9 +78,9 @@ pub fn encrypt<W: Write, R: Read>(
     mut src: R,
     chain_hash: &[u8],
     public_key_bytes: &[u8],
-    round: u64,
+    tag: [u8; 32],
 ) -> anyhow::Result<(), TLockAgeError> {
-    let recipient = Recipient::new(chain_hash, public_key_bytes, round);
+    let recipient = Recipient::new(chain_hash, public_key_bytes, tag);
     let encryptor = age::Encryptor::with_recipients(vec![Box::new(recipient)])
         .expect("we provided a recipient");
 
