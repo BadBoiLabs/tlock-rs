@@ -32,6 +32,8 @@ getrandom = { workspace = true, features = ["js"] }
 criterion = { workspace = true, features = ["html_reports"] }
 drand_core = { workspace = true }
 hex = { workspace = true }
+bls-signatures = { git = "https://github.com/BadBoiLabs/bls-signatures", rev = "1557d58cdae7f04ea6d7f8db78ec64c63bf8af5d", no-default-features = true }
+rand_chacha = "0.3.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 pprof = { version = "0.11", features = ["criterion", "flamegraph"] }

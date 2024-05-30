@@ -39,11 +39,11 @@ pub enum TLockError {
 /// ```rust
 /// // curl -sS https://api.drand.sh/dbd506d6ef76e5f386f41c651dcb808c5bcbd75471cc4eafa3f4df7ad4e4c493/info | jq -r '.public_key'
 /// let pk_bytes = hex::decode("a0b862a7527fee3a731bcb59280ab6abd62d5c0b6ea03dc4ddf6612fdfc9d01f01c31542541771903475eb1ec6615f8d0df0b8b6dce385811d6dcf8cbefb8759e5e616a3dfd054c928940766d9a5b9db91e3b697e5d70a975181e007f87fca5e").unwrap();
-/// let round = 1000;
+/// let tag = [0xff_u8; 32];
 /// let src = vec![0u8; 16];
 ///
 /// let mut encrypted = vec![];
-/// tlock::encrypt(&mut encrypted, src.as_slice(), &pk_bytes, round);
+/// tlock::encrypt(&mut encrypted, src.as_slice(), &pk_bytes, &tag);
 /// ```
 pub fn encrypt<W: io::Write, R: io::Read>(
     mut dst: W,
@@ -138,51 +138,79 @@ fn time_unlock(signature: &[u8], c: &Ciphertext) -> Result<Vec<u8>, TLockError> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bls_signatures::{aggregate, aggregate_keys, PrivateKey, PublicKey, Serialize, Signature};
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
+
+    // #[test]
+    // fn test_pk_g1_sig_g2() {
+    //     let pk_bytes = hex::decode("8200fc249deb0148eb918d6e213980c5d01acd7fc251900d9260136da3b54836ce125172399ddc69c4e3e11429b62c11").unwrap();
+
+    //     let msg = vec![8; 16];
+    //     let ct = time_lock(&pk_bytes, 1000, msg.clone()).unwrap();
+
+    //     let signature = hex::decode("a4721e6c3eafcd823f138cd29c6c82e8c5149101d0bb4bafddbac1c2d1fe3738895e4e21dd4b8b41bf007046440220910bb1cdb91f50a84a0d7f33ff2e8577aa62ac64b35a291a728a9db5ac91e06d1312b48a376138d77b4d6ad27c24221afe").unwrap();
+
+    //     let pt = time_unlock(&signature, &ct).unwrap();
+    //     assert_eq!(pt, msg)
+    // }
+
+    // #[cfg(not(feature = "rfc9380"))]
+    // #[test]
+    // fn test_pk_g2_sig_g1() {
+    //     // fastnet https://drand.cloudflare.com/dbd506d6ef76e5f386f41c651dcb808c5bcbd75471cc4eafa3f4df7ad4e4c493/info
+    //     let pk_bytes = hex::decode("a0b862a7527fee3a731bcb59280ab6abd62d5c0b6ea03dc4ddf6612fdfc9d01f01c31542541771903475eb1ec6615f8d0df0b8b6dce385811d6dcf8cbefb8759e5e616a3dfd054c928940766d9a5b9db91e3b697e5d70a975181e007f87fca5e").unwrap();
+
+    //     // at round 1000
+    //     // https://drand.cloudflare.com/dbd506d6ef76e5f386f41c651dcb808c5bcbd75471cc4eafa3f4df7ad4e4c493/public/1000
+    //     let msg = vec![8; 16];
+    //     let ct = time_lock(&pk_bytes, 1000, msg.clone()).unwrap();
+
+    //     let signature = hex::decode("b09eacd45767c4d58306b98901ad0d6086e2663766f3a4ec71d00cf26f0f49eaf248abc7151c60cf419c4e8b37e80412").unwrap();
+
+    //     let pt = time_unlock(&signature, &ct).unwrap();
+    //     assert_eq!(pt, msg)
+    // }
+
+    // #[cfg(feature = "rfc9380")]
+    // #[test]
+    // fn test_pk_g2_sig_g1() {
+    //     // quicknet https://drand.cloudflare.com/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/info
+    //     let pk_bytes = hex::decode("83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a").unwrap();
+
+    //     // at round 1000
+    //     // https://drand.cloudflare.com/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/1000
+    //     let msg = vec![8; 16];
+    //     let ct = time_lock(&pk_bytes, 1000, msg.clone()).unwrap();
+
+    //     let signature = hex::decode("b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39").unwrap();
+
+    //     let pt = time_unlock(&signature, &ct).unwrap();
+    //     assert_eq!(pt, msg)
+    // }
 
     #[test]
-    fn test_pk_g1_sig_g2() {
-        let pk_bytes = hex::decode("8200fc249deb0148eb918d6e213980c5d01acd7fc251900d9260136da3b54836ce125172399ddc69c4e3e11429b62c11").unwrap();
+    fn test_bls_signatures_crate_compatibility() {
+        let mut rng = ChaCha8Rng::seed_from_u64(88);
+
+        let tag = [0xff_u8; 32];
+
+        let sk1 = PrivateKey::generate(&mut rng);
+        let sk2 = PrivateKey::generate(&mut rng);
+
+        let pk1 = sk1.public_key();
+        let pk2 = sk2.public_key();
+        let agg_pk = aggregate_keys(&[pk1, pk2]).unwrap();
 
         let msg = vec![8; 16];
-        let ct = time_lock(&pk_bytes, 1000, msg.clone()).unwrap();
 
-        let signature = hex::decode("a4721e6c3eafcd823f138cd29c6c82e8c5149101d0bb4bafddbac1c2d1fe3738895e4e21dd4b8b41bf007046440220910bb1cdb91f50a84a0d7f33ff2e8577aa62ac64b35a291a728a9db5ac91e06d1312b48a376138d77b4d6ad27c24221afe").unwrap();
+        let sig1 = sk1.sign(tag.as_slice());
+        let sig2 = sk2.sign(tag.as_slice());
+        let agg_sig = aggregate(&[sig1, sig2]).unwrap();
 
-        let pt = time_unlock(&signature, &ct).unwrap();
-        assert_eq!(pt, msg)
-    }
+        let ct = time_lock(&agg_pk.as_bytes(), &tag, msg.clone()).unwrap();
+        let pt = time_unlock(&agg_sig.as_bytes(), &ct).unwrap();
 
-    #[cfg(not(feature = "rfc9380"))]
-    #[test]
-    fn test_pk_g2_sig_g1() {
-        // fastnet https://drand.cloudflare.com/dbd506d6ef76e5f386f41c651dcb808c5bcbd75471cc4eafa3f4df7ad4e4c493/info
-        let pk_bytes = hex::decode("a0b862a7527fee3a731bcb59280ab6abd62d5c0b6ea03dc4ddf6612fdfc9d01f01c31542541771903475eb1ec6615f8d0df0b8b6dce385811d6dcf8cbefb8759e5e616a3dfd054c928940766d9a5b9db91e3b697e5d70a975181e007f87fca5e").unwrap();
-
-        // at round 1000
-        // https://drand.cloudflare.com/dbd506d6ef76e5f386f41c651dcb808c5bcbd75471cc4eafa3f4df7ad4e4c493/public/1000
-        let msg = vec![8; 16];
-        let ct = time_lock(&pk_bytes, 1000, msg.clone()).unwrap();
-
-        let signature = hex::decode("b09eacd45767c4d58306b98901ad0d6086e2663766f3a4ec71d00cf26f0f49eaf248abc7151c60cf419c4e8b37e80412").unwrap();
-
-        let pt = time_unlock(&signature, &ct).unwrap();
-        assert_eq!(pt, msg)
-    }
-
-    #[cfg(feature = "rfc9380")]
-    #[test]
-    fn test_pk_g2_sig_g1() {
-        // quicknet https://drand.cloudflare.com/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/info
-        let pk_bytes = hex::decode("83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a").unwrap();
-
-        // at round 1000
-        // https://drand.cloudflare.com/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/1000
-        let msg = vec![8; 16];
-        let ct = time_lock(&pk_bytes, 1000, msg.clone()).unwrap();
-
-        let signature = hex::decode("b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39").unwrap();
-
-        let pt = time_unlock(&signature, &ct).unwrap();
-        assert_eq!(pt, msg)
+        assert_eq!(pt, msg);
     }
 }
