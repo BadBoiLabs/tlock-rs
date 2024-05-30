@@ -23,7 +23,8 @@ tlock = { path = "../tlock", version = "0.0.5" }
 criterion = { workspace = true, features = ["html_reports"] }
 drand_core = { workspace = true }
 rand = { workspace = true, default-features = true }
-
+bls-signatures = { git = "https://github.com/BadBoiLabs/bls-signatures", rev = "1557d58cdae7f04ea6d7f8db78ec64c63bf8af5d", no-default-features = true }
+rand_chacha = "0.3.1"
 [target.'cfg(wasm32)'.dev-dependencies]
 getrandom = { workspace = true, features = ["js"] }
 

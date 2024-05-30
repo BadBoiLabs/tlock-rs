@@ -37,8 +37,7 @@ impl age::Identity for Identity {
         }
         let args: [String; 2] = [stanza.args[0].clone(), stanza.args[1].clone()];
 
-        let _round = args[0]
-            .parse::<u64>()
+        let _tag = hex::decode(&args[0])
             .map_err(|_| age::DecryptError::InvalidHeader)
             .ok()?;
 
@@ -186,22 +185,41 @@ mod tests {
         iter,
     };
 
-    use drand_core::HttpClient;
+    use bls_signatures::{aggregate, aggregate_keys, PrivateKey, Serialize};
+    use rand::SeedableRng as _;
+    use rand_chacha::ChaCha8Rng;
 
     use crate::{Identity, Recipient};
 
     #[test]
     fn it_works() {
-        let client: HttpClient =
-            "https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
-                .try_into()
-                .unwrap();
-        let info = client.chain_info().unwrap();
+        let num_signers = 3;
 
-        let round = 100;
-        let beacon = client.get(round).unwrap();
-        let id = Identity::new(&info.hash(), &beacon.signature());
-        let recipient = Recipient::new(&info.hash(), &info.public_key(), round);
+        let tag = {
+            let mut tag = [0; 32];
+            tag.fill_with(rand::random);
+            tag
+        };
+        let info_hash = {
+            let mut info_hash = [0; 32];
+            info_hash.fill_with(rand::random);
+            info_hash
+        };
+
+        let sks = (0..num_signers)
+            .map(|_| PrivateKey::generate(&mut ChaCha8Rng::seed_from_u64(88)))
+            .collect::<Vec<_>>();
+
+        let pks = sks.iter().map(|sk| sk.public_key()).collect::<Vec<_>>();
+        let agg_pk = aggregate_keys(&pks).unwrap();
+
+        let agg_sig = {
+            let sigs = sks.iter().map(|sk| sk.sign(&tag)).collect::<Vec<_>>();
+            aggregate(&sigs).unwrap()
+        };
+
+        let id = Identity::new(&info_hash, &agg_sig.as_bytes());
+        let recipient = Recipient::new(&info_hash, &agg_pk.as_bytes(), tag);
 
         let mut plaintext = vec![0u8; 1000];
         plaintext.fill_with(rand::random);
